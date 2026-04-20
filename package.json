@@ -1,6 +1,6 @@
 {
   "name": "Arlecchino",
-  "version": "1.0-prebuild",
+  "version": "1.0.1-prebuild",
   "description": "A Node.js Discord bot that provides Genshin Impact character data, build recommendations, and interactive commands.",
   "main": "index.js",
   "scripts": {
