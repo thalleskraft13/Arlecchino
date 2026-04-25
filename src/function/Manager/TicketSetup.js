@@ -185,6 +185,7 @@ class TicketSystem {
       [
         { label: "Cargos da Staff", value: "staff" },
         { label: "Canal de envio", value: "canal" },
+        { label: premium ? "Tipo de Criação" : "🔒 Tipo (Premium)", value: "tipo" },
         { label: "Categoria", value: "categoria" },
         { label: premium ? "Nome do Ticket" : "🔒 Nome (Premium)", value: "nome" },
         { label: "Embed JSON", value: "json" },
@@ -203,6 +204,7 @@ class TicketSystem {
         if (v === "json") return this.setJson(i, guild, panelId, user);
         if (v === "send") return this.sendPanel(i, guild, panelId);
         if (v === "delete") return this.deletePanel(i, guild, panelId, user);
+        if (v === "tipo") return this.setTipo(i, guild, panelId, user);
       }
     );
 
@@ -216,14 +218,11 @@ class TicketSystem {
   }
 
   /* ================= TICKET CREATE ================= */
-
-async create(interaction) {
+  async create(interaction) {
   try {
 
     const guild = await this.getGuild(interaction.guild_id);
-
-    const panelId = interaction.data.panelId;
-    const panel = this.getPanel(guild, panelId);
+    const panel = this.getPanel(guild, interaction.data.panelId);
 
     if (!panel) {
       return this.reply(interaction, {
@@ -233,32 +232,59 @@ async create(interaction) {
     }
 
     const userId = interaction.member.user.id;
-
     panel.contadorTicket++;
 
-    // cria canal SEM erro de categoria null
-    const body = {
-      name: `ticket-${panel.contadorTicket}`,
-      type: 0
-    };
+    let channel;
 
-    if (panel.categoriaId) {
-      body.parent_id = panel.categoriaId;
+    // ================= CANAL NORMAL =================
+    if (panel.tipoDeCriacao === 0) {
+
+      const body = {
+        name: `ticket-${panel.contadorTicket}`,
+        type: 0
+      };
+
+      if (panel.categoriaId) {
+        body.parent_id = panel.categoriaId;
+      }
+
+      channel = await DiscordRequest(
+        `/guilds/${interaction.guild_id}/channels`,
+        { method: "POST", body }
+      );
     }
 
-    const channel = await DiscordRequest(
-      `/guilds/${interaction.guild_id}/channels`,
-      {
-        method: "POST",
-        body
+    // ================= THREAD =================
+    else {
+
+      if (!panel.canalId) {
+        return this.reply(interaction, {
+          content: "❌ Defina um canal base para threads",
+          flags: 64
+        });
       }
-    );
+
+      const thread = await DiscordRequest(
+        `/channels/${panel.canalId}/threads`,
+        {
+          method: "POST",
+          body: {
+            name: `ticket-${panel.contadorTicket}`,
+            type: panel.tipoDeCriacao === 1 ? 11 : 12, // public/private
+            auto_archive_duration: 1440
+          }
+        }
+      );
+
+      channel = thread;
+    }
+
+    // ================= MENSAGEM =================
 
     const staff = panel.cargosStaff.length
       ? panel.cargosStaff.map(r => `<@&${r}>`).join(" ")
       : "";
 
-    // mensagem dentro do ticket
     await DiscordRequest(`/channels/${channel.id}/messages`, {
       method: "POST",
       body: {
@@ -281,21 +307,22 @@ async create(interaction) {
 
     await this.save(guild);
 
-    // ACK correto da interação (evita erro silencioso)
     return this.reply(interaction, {
       content: `✅ Ticket criado em <#${channel.id}>`,
       flags: 64
     });
 
   } catch (err) {
-    console.error("❌ CREATE ERROR:", err);
+    console.error(err);
 
     return this.reply(interaction, {
-      content: "❌ Falha ao criar ticket",
+      content: "❌ Erro ao criar ticket",
       flags: 64
     });
   }
-}  
+}
+
+
 
   /* ================= CLOSE ================= */
 
@@ -392,6 +419,42 @@ async create(interaction) {
       content: "✅ Painel enviado!"
     });
   }
+  
+ async setTipo(interaction, guild, panelId, user) {
+
+  const premium = await this.isPremium(guild.guildId);
+
+  const options = [
+    { label: "Canal de Texto", value: "0" },
+    { label: premium ? "Thread Pública" : "🔒 Thread Pública (Premium)", value: "1" },
+    { label: premium ? "Thread Privada" : "🔒 Thread Privada (Premium)", value: "2" }
+  ];
+
+  const select = this.select(user, options, "Escolha o tipo", async (i) => {
+
+    await this.deferUpdate(i);
+
+    const value = Number(i.data.values[0]);
+
+    if (!premium && value !== 0) {
+      return this.followUpEphemeral(i, {
+        content: "❌ Apenas usuários premium podem usar threads"
+      });
+    }
+
+    const panel = this.getPanel(guild, panelId);
+    panel.tipoDeCriacao = value;
+
+    await this.save(guild);
+
+    return this.panelMenu(i, guild, panelId, user);
+  });
+
+  return this.followUpEphemeral(interaction, {
+    content: "Selecione o tipo de criação:",
+    components: [this.row(select)]
+  });
+} 
 
   async setStaff(interaction, guild, panelId, user) {
 
