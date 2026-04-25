@@ -5,7 +5,8 @@ const userSchema = new Schema({
   
   primogemas: { //economy
     atm: { type: Number, default: 0 },
-    transacoes: { type: Array, default: []}
+    transacoes: { type: Array, default: []},
+    daily_tempo: { type: Number,default: 0 }
   }
 });
 

@@ -4,6 +4,8 @@ const { WebSocketManager, WebSocketShardEvents } = require('@discordjs/ws');
 const { REST } = require('@discordjs/rest');
 const { Routes } = require('discord-api-types/v10');
 const connectMongo = require('./ConnectMongo');
+const InteractionManager = require("./InteractionManager")
+const NextMessageCollector = require("./MessageCollectorManager")
 
 class DiscordGatewayClient {
 
@@ -27,6 +29,8 @@ class DiscordGatewayClient {
         });
 
         this._consoleSeparator("BOOT");
+        this.interactions = new InteractionManager(this);
+        this.NextMessageCollector = new NextMessageCollector(this);
         this._loadCommands();
         this._registerEvents();
     }
@@ -179,6 +183,8 @@ class DiscordGatewayClient {
         });
 
         this.manager.on(WebSocketShardEvents.Dispatch, async (payload) => {
+          
+          this.NextMessageCollector.handle(payload)
 
             if (payload.t !== 'INTERACTION_CREATE') return;
 
@@ -191,7 +197,7 @@ class DiscordGatewayClient {
 
             try {
 
-                console.log(`⚡ Executing: ${interaction.data.name}`);
+                
 
                 await command.execute(interaction, this);
 
@@ -201,6 +207,8 @@ class DiscordGatewayClient {
                 console.error(error);
             }
         });
+        
+        this.interactions.run();
     }
 
     /* ===============================
