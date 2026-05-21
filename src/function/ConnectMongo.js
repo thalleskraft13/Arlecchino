@@ -20,8 +20,7 @@ async function connectMongo() {
 
         isConnected = true;
 
-        console.log('✔ MongoDB connected with Mongoose.');
-
+        
         return mongoose.connection;
 
     } catch (error) {

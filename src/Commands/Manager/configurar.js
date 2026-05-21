@@ -39,61 +39,93 @@ module.exports = {
       return;
     }
 
-   
-
     let guildData = {};
 
     try {
+
       guildData = await DiscordRequest(
         `/guilds/${interaction.guild_id}`,
         {
           method: "GET"
         }
       );
+
     } catch {
+
       guildData = {};
     }
 
-    const user = interaction.member.user.id;
+    const user =
+      interaction.member.user.id;
 
+    const ticketBtn =
+      client.interactions.createButton({
 
-    const ticketBtn = client.interactions.createButton({
-      user,
+        user,
 
-      data: {
-        label: "Sistema de Tickets",
-        emoji: {
-          name: "🎫"
+        data: {
+          label: "Sistema de Tickets",
+          emoji: {
+            name: "🎫"
+          },
+          style: 1
         },
-        style: 1
-      },
 
-      funcao: async (i) => {
+        funcao: async (i) => {
 
-        await client.ticketSystem.deferUpdate(i);
+          await client.ticketSystem
+            .deferUpdate(i);
 
-        return client.ticketSystem.startSetup(i);
-      }
-    })
-    
-    const uidBtn = client.interactions.createButton({
-      user,
+          return client.ticketSystem
+            .startSetup(i);
+        }
+      });
 
-      data: {
-        label: "Sistema de UID",
-        emoji: {
-          name: "✨"
+    const uidBtn =
+      client.interactions.createButton({
+
+        user,
+
+        data: {
+          label: "Sistema de UID",
+          emoji: {
+            name: "✨"
+          },
+          style: 2
         },
-        style: 2
-      },
 
-      funcao: async (i) => {
+        funcao: async (i) => {
 
-        await client.UidManager.deferUpdate(i);
-        return client.UidManager.startSetup(i);
-      }
-    });
-    
+          await client.UidManager
+            .deferUpdate(i);
+
+          return client.UidManager
+            .startSetup(i);
+        }
+      });
+
+    const leaksBtn =
+      client.interactions.createButton({
+
+        user,
+
+        data: {
+          label: "Genshin Vazamentos",
+          emoji: {
+            name: "📰"
+          },
+          style: 3
+        },
+
+        funcao: async (i) => {
+
+          await client.GenshinLeaksManager
+            .deferUpdate(i);
+
+          return client.GenshinLeaksManager
+            .startSetup(i);
+        }
+      });
 
     await DiscordRequest(
       `/interactions/${interaction.id}/${interaction.token}/callback`,
@@ -107,7 +139,8 @@ module.exports = {
 
             embeds: [
               {
-                title: "⚙️ Central de Configuração",
+                title:
+                  "⚙️ Central de Configuração",
 
                 description:
                   [
@@ -118,8 +151,9 @@ module.exports = {
                     "🎫 **Sistema de Tickets**",
                     "Configure painéis, categorias, staff, modais e automações.",
                     "",
-                    "✨ **Sistema de House**",
-                    "Configure recepção,salve personagens pra facilitar buscas,mensagens e etc.\n-# Ainda em desenvolvimento.",
+                    "📰 **Genshin Vazamentos**",
+                    "Receba automaticamente vazamentos, anúncios e notícias do servidor principal.",
+                    "Suporte a imagens, vídeos, embeds e cargo de ping.",
                     "",
                     "📌 **Compartilhamento de UID**",
                     "Configure envio automático de UID em canais específicos.",
@@ -128,14 +162,15 @@ module.exports = {
 
                 color: 0x2b2d31,
 
-                thumbnail: guildData.icon
-                  ? {
-                      url:
-                        `https://cdn.discordapp.com/icons/` +
-                        `${interaction.guild_id}/` +
-                        `${guildData.icon}.png?size=1024`
-                    }
-                  : undefined,
+                thumbnail:
+                  guildData.icon
+                    ? {
+                        url:
+                          `https://cdn.discordapp.com/icons/` +
+                          `${interaction.guild_id}/` +
+                          `${guildData.icon}.png?size=1024`
+                      }
+                    : undefined,
 
                 footer: {
                   text:
@@ -148,16 +183,11 @@ module.exports = {
             components: [
               {
                 type: 1,
+
                 components: [
                   ticketBtn,
                   uidBtn,
-                  {
-  type: 2,
-  style: 1,
-  label: "House Sistema",
-  custom_id: "x",
-  disabled: true
-}
+                  leaksBtn
                 ]
               }
             ]

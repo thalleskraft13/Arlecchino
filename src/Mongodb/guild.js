@@ -65,6 +65,13 @@ const guildSchema = new Schema({
     chat: { type: String,default: "0"},
     emoji: { type: String,default: "⭐" },
     salvar: { type: Boolean,default: true}
+  },
+  
+  genshinAnuncios: {
+    vazamentos: {
+      chat: { type: String,default: "0"},
+      ping: { type: String,default: "0"}
+    },
   }
 
 });

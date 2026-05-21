@@ -1,6 +1,6 @@
-const TaskModel = require("../Mongodb/tarefas.js");
+const TaskModel = require("../../Mongodb/tarefas.js");
 const { randomUUID } = require("crypto");
-const DiscordRequest = require("./DiscordRequest.js");
+const DiscordRequest = require("../DiscordRequest.js");
 
 class TaskManager {
 

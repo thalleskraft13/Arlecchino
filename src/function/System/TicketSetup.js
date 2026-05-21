@@ -582,36 +582,139 @@ async createTicketNormally(interaction, guild, panel) {
 
   async setJson(interaction, guild, panelId, user) {
 
-    await this.followUpEphemeral(interaction, {
-      content: "Cole o JSON da embed"
-    });
+  const modal = this.client.interactions.createModal({
+    user,
+    title: "Configurar Embed JSON",
+    components: [
+      {
+        type: 1,
+        components: [{
+          type: 4,
+          custom_id: "embed_json",
+          label: "Cole o JSON da embed",
+          style: 2,
+          required: true,
+          max_length: 4000,
+          placeholder:
+`{
+  "title": "Meu Painel",
+  "description": "Descrição aqui"
+}`
+        }]
+      }
+    ],
 
-    let msg;
+    funcao: async (modalInteraction, client, fields) => {
 
-    try {
-      msg = await this.client.NextMessageCollector.wait({
-        channelId: interaction.channel_id,
-        userId: user
-      });
-    } catch {
-      return;
+      try {
+
+        let parsed;
+
+        try {
+          parsed = JSON.parse(fields.embed_json);
+        } catch {
+          return DiscordRequest(
+            `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
+            {
+              method: "POST",
+              body: {
+                type: 4,
+                data: {
+                  content: "❌ JSON inválido.",
+                  flags: 64
+                }
+              }
+            }
+          );
+        }
+
+        // verifica se realmente é embed
+        const embed =
+          parsed.embeds?.[0] ||
+          parsed.embed ||
+          parsed;
+
+        // validação mínima
+        const hasEmbedData =
+          embed.title ||
+          embed.description ||
+          embed.fields ||
+          embed.author ||
+          embed.footer ||
+          embed.image ||
+          embed.thumbnail;
+
+        if (!hasEmbedData || typeof embed !== "object") {
+          return DiscordRequest(
+            `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
+            {
+              method: "POST",
+              body: {
+                type: 4,
+                data: {
+                  content:
+                    "❌ O JSON enviado não parece ser uma embed válida.",
+                  flags: 64
+                }
+              }
+            }
+          );
+        }
+
+        const panel = this.getPanel(guild, panelId);
+
+        panel.painelPrincipal = embed;
+
+        await this.save(guild);
+
+        // ACK
+        await DiscordRequest(
+          `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
+          {
+            method: "POST",
+            body: {
+              type: 6
+            }
+          }
+        );
+
+        await this.followUpEphemeral(modalInteraction, {
+          content: "✅ Embed configurada com sucesso!"
+        });
+
+        return this.panelMenu(
+          modalInteraction,
+          guild,
+          panelId,
+          user
+        );
+
+      } catch (err) {
+
+        console.error(err);
+
+        return DiscordRequest(
+          `/interactions/${modalInteraction.id}/${modalInteraction.token}/callback`,
+          {
+            method: "POST",
+            body: {
+              type: 4,
+              data: {
+                content: "❌ Erro ao processar JSON.",
+                flags: 64
+              }
+            }
+          }
+        );
+      }
     }
+  });
 
-    try {
-      const json = JSON.parse(msg.content);
-      const panel = this.getPanel(guild, panelId);
-      panel.painelPrincipal = json.embeds?.[0] || json;
-      await this.save(guild);
-    } catch {
-      return this.followUpEphemeral(interaction, {
-        content: "JSON inválido"
-      });
-    }
-    
-    
-
-    return this.panelMenu(interaction, guild, panelId, user);
-  }
+  return this.client.interactions.showModal(
+    interaction,
+    modal
+  );
+}
 
   async sendPanel(interaction, guild, panelId) {
 
