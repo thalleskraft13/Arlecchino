@@ -1,3 +1,5 @@
+'use strict';
+
 const getPerm = require("../../function/Utils/GetPerm.js");
 const DiscordRequest = require("../../function/DiscordRequest.js");
 
@@ -55,77 +57,83 @@ module.exports = {
       guildData = {};
     }
 
-    const user =
-      interaction.member.user.id;
+    const user = interaction.member.user.id;
 
-    const ticketBtn =
-      client.interactions.createButton({
+    const configSelect = client.interactions.createSelect({
+      user,
 
-        user,
+      data: {
+        placeholder: "Selecione um sistema para configurar",
 
-        data: {
-          label: "Sistema de Tickets",
-          emoji: {
-            name: "🎫"
+        options: [
+          {
+            label: "Sistema de Tickets",
+            description: "Painéis, categorias, staff e automações",
+            value: "tickets",
+            emoji: {
+              name: "🎫"
+            }
           },
-          style: 1
-        },
 
-        funcao: async (i) => {
-
-          await client.ticketSystem
-            .deferUpdate(i);
-
-          return client.ticketSystem
-            .startSetup(i);
-        }
-      });
-
-    const uidBtn =
-      client.interactions.createButton({
-
-        user,
-
-        data: {
-          label: "Sistema de UID",
-          emoji: {
-            name: "✨"
+          {
+            label: "Sistema de UID",
+            description: "Compartilhamento automático de UID",
+            value: "uid",
+            emoji: {
+              name: "✨"
+            }
           },
-          style: 2
-        },
 
-        funcao: async (i) => {
-
-          await client.UidManager
-            .deferUpdate(i);
-
-          return client.UidManager
-            .startSetup(i);
-        }
-      });
-
-    const leaksBtn =
-      client.interactions.createButton({
-
-        user,
-
-        data: {
-          label: "Genshin Vazamentos",
-          emoji: {
-            name: "📰"
+          {
+            label: "Genshin Vazamentos",
+            description: "Notícias, anúncios e vazamentos",
+            value: "leaks",
+            emoji: {
+              name: "📰"
+            }
           },
-          style: 3
-        },
 
-        funcao: async (i) => {
+          {
+            label: "Logic Builder",
+            description: "Criação de fluxos e automações",
+            value: "logic",
+            emoji: {
+              name: "⚡"
+            }
+          }
+        ]
+      },
 
-          await client.GenshinLeaksManager
-            .deferUpdate(i);
+      funcao: async (i) => {
 
-          return client.GenshinLeaksManager
-            .startSetup(i);
+        const value = i.data.values?.[0];
+
+        switch (value) {
+
+          case "tickets":
+            await client.ticketSystem.deferUpdate(i);
+            return client.ticketSystem.startSetup(i);
+
+          case "uid":
+            await client.UidManager.deferUpdate(i);
+            return client.UidManager.startSetup(i);
+
+          case "leaks":
+            await client.GenshinLeaksManager.deferUpdate(i);
+            return client.GenshinLeaksManager.startSetup(i);
+
+          case "logic":
+
+            if (client.logicUI.ui?.deferUpdate) {
+              await client.logicUI.ui.deferUpdate(i);
+            } else {
+              await client.ticketSystem.deferUpdate(i);
+            }
+
+            return client.logicUI.open(i);
         }
-      });
+      }
+    });
 
     await DiscordRequest(
       `/interactions/${interaction.id}/${interaction.token}/callback`,
@@ -146,7 +154,7 @@ module.exports = {
                   [
                     "Bem-vindo ao painel principal de configuração.",
                     "",
-                    "> Escolha um sistema abaixo para começar.",
+                    "> Escolha um sistema no menu abaixo para começar.",
                     "",
                     "🎫 **Sistema de Tickets**",
                     "Configure painéis, categorias, staff, modais e automações.",
@@ -155,9 +163,12 @@ module.exports = {
                     "Receba automaticamente vazamentos, anúncios e notícias do servidor principal.",
                     "Suporte a imagens, vídeos, embeds e cargo de ping.",
                     "",
-                    "📌 **Compartilhamento de UID**",
+                    "✨ **Compartilhamento de UID**",
                     "Configure envio automático de UID em canais específicos.",
-                    "Suporte a webhook com nome e foto do usuário."
+                    "Suporte a webhook com nome e foto do usuário.",
+                    "",
+                    "⚡ **Logic Builder**",
+                    "Crie automações e fluxos personalizados para seu servidor."
                   ].join("\n"),
 
                 color: 0x2b2d31,
@@ -166,9 +177,7 @@ module.exports = {
                   guildData.icon
                     ? {
                         url:
-                          `https://cdn.discordapp.com/icons/` +
-                          `${interaction.guild_id}/` +
-                          `${guildData.icon}.png?size=1024`
+                          `https://cdn.discordapp.com/icons/${interaction.guild_id}/${guildData.icon}.png?size=1024`
                       }
                     : undefined,
 
@@ -183,11 +192,8 @@ module.exports = {
             components: [
               {
                 type: 1,
-
                 components: [
-                  ticketBtn,
-                  uidBtn,
-                  leaksBtn
+                  configSelect
                 ]
               }
             ]

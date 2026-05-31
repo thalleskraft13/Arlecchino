@@ -94,4 +94,4 @@ premium_guilds: {
 
 });
 
-module.exports = model("User Global", userSchema);
+module.exports = model("User Global-Canary", userSchema);

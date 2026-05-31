@@ -1,5 +1,5 @@
 const UserGlobalDb = require("../../Mongodb/userglobal.js");
-const GuildDb = require("../../Mongodb/guild.js");
+const {GuildDb} = require("../../Mongodb/guild.js");
 const PremiumKey = require("../../Mongodb/premiumKey.js");
 
 class PremiumManager {

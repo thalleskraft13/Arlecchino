@@ -70,7 +70,7 @@ module.exports = {
             
         }
 
-        await client.TaskManager.create({
+        await client.taskManager.create({
             tipo: "lembrete",
             delay,
             dados: {

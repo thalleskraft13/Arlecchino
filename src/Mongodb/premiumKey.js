@@ -35,4 +35,4 @@ const keySchema = new Schema({
 
 });
 
-module.exports = model("PremiumKey", keySchema);
+module.exports = model("PremiumKey-Canary", keySchema);

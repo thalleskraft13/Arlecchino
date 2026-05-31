@@ -7,4 +7,4 @@ const UserGuild = new Schema({
   starboard: { type: Number,default: 0},
 });
 
-module.exports = model("UserGuild", UserGuild);
+module.exports = model("UserGuild-Canary", UserGuild);

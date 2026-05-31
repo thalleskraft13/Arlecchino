@@ -102,6 +102,6 @@ const EmbedsComponentSchema = new mongoose.Schema({
 });
 
 module.exports = mongoose.model(
-  'EmbedsComponent',
+  'EmbedsComponent-Canary',
   EmbedsComponentSchema
 );

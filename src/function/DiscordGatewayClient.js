@@ -12,13 +12,15 @@ const connectMongo         = require('./ConnectMongo.js');
 const InteractionManager   = require('./Manager/InteractionManager.js');
 const NextMessageCollector = require('./Manager/MessageCollectorManager.js');
 const GuildManager = require('./Manager/GuildManager.js');
-const TicketSystem         = require('./System/TicketSetup.js');
+const TicketSystem         = require('./System/Ticket/index.js');
 const UidSystem            = require('./System/UidManager.js');
 const TaskManager          = require('./Manager/TaskManager.js');
 const UserGlobalDb         = require('../Mongodb/userglobal.js');
 const sendDm               = require('./Utils/sendDm.js');
 const MessageEmbed         = require('./Messages/EmbedBuild.js');
 const GenshinLeaksManager  = require('./System/GenshinLeaksManager.js');
+const LogicEngine = require('./System/EventCreater/LogicEngine.js')
+const FlowUI = require('./System/EventCreater/FlowUI.js');
 
 
 
@@ -65,9 +67,12 @@ class DiscordGatewayClient {
         this.interactions      = new InteractionManager(this);
         this.NextMessageCollector = new NextMessageCollector(this);
         this.ticketSystem      = new TicketSystem(this);
-        this.TaskManager       = new TaskManager(this);
+        this.taskManager       = new TaskManager(this);
         this.UidManager        = new UidSystem(this);
         this.GenshinLeaksManager = new GenshinLeaksManager(this);
+        this.logicEngine = new LogicEngine(this);
+        this.logicUI = new FlowUI(this);
+
         
         this.guilds = new GuildManager(this);
 
@@ -291,6 +296,7 @@ class DiscordGatewayClient {
         try {
             this.NextMessageCollector.handle(payload);
             this.guilds.handleDispatch(payload);
+            this.logicEngine.handleGateway(payload);
 
             if (payload.t === 'READY')             return await this._onReady();
             if (payload.t === 'INTERACTION_CREATE') return await this._onInteraction(payload.d);
@@ -305,6 +311,7 @@ class DiscordGatewayClient {
         console.log('[Ready] Gateway ready. Bot is online.');
         this.setPresence();
         await this._connectMongo();
+        await this.logicEngine.start();
         await this._startTaskManager();
     }
 
@@ -325,7 +332,7 @@ class DiscordGatewayClient {
 
     async _startTaskManager() {
         try {
-            await this.TaskManager.start();
+            await this.taskManager.start();
             console.log('[Ready] TaskManager started.');
         } catch (err) {
             console.error('[Ready] TaskManager failed to start:', err);
