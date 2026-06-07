@@ -129,6 +129,12 @@ class NextMessageCollector {
             this._updateXpRemaining(user);
 
             await user.save();
+            await this.client.missionManager.trackEvent(
+  userId, 'send_message', 1, message.guild_id
+);
+await this.client.missionManager.trackEvent(
+  userId, 'earn_xp', 5, message.guild_id
+);
 
             if (levelsGained > 0 && user.dmNotificacoes) {
                 await this._sendLevelUpDm(userId, user, levelBefore, levelAfter);

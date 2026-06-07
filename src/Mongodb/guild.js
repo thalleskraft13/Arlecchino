@@ -6,6 +6,22 @@ const { Schema, model } = require("mongoose");
    SUB-SCHEMAS
    ───────────────────────────────────────────── */
 
+const birthdayConfigSchema = new Schema({
+  ativado:      { type: Boolean, default: false },
+  channel:      { type: String,  default: "0" },
+  ping:         { type: String,  default: "0" },
+  birthdayRole: { type: String,  default: "0" },
+  birthdayThread: { type: Boolean, default: false },
+  webhook:      { type: Boolean, default: false },
+  webhookName:   { type: String, default: null },
+  webhookAvatar: { type: String, default: null },
+  pinMessage:   { type: Boolean, default: false },
+  _pinMsgId:    { type: String,  default: null },
+  hour:         { type: Number,  default: 8  },
+  minute:       { type: Number,  default: 0  },
+  messageText:  { type: String,  default: "🎂 Hoje é o aniversário de {user}! Parabéns! 🎉" }
+}, { _id: false });
+
 const modalFieldSchema = new Schema({
   label:       String,
   customId:    String,
@@ -173,7 +189,25 @@ const guildSchema = new Schema({
       chat: { type: String, default: "0" },
       ping: { type: String, default: "0" }
     }
+  },
+  
+  birthdayConfig: { type: birthdayConfigSchema, default: () => ({}) },
+  
+  webhooks: {
+  componentsV2: {
+    enabled: { type: Boolean, default: false },
+    items: {
+      type: [{
+        channelId: String,
+        webhookId: String,
+        webhookToken: String,
+        url: String,
+        createdAt: Number
+      }],
+      default: []
+    }
   }
+}
 });
 
 /* ─────────────────────────────────────────────
@@ -189,3 +223,4 @@ module.exports = {
   PendingTempRoleModel,
   ActiveLinkedRoleModel
 };
+

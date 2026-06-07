@@ -1,13 +1,19 @@
-require('dotenv').config();
-const DiscordGatewayClient = require('./src/function/DiscordGatewayClient.js');
+'use strict';
 
-const start = async () => {
-    const client = new DiscordGatewayClient({
-        intents: 53608447
+require('dotenv').config();
+
+const { isMainThread } = require('worker_threads');
+const ClusterManager   = require('./src/Core/ClusterManager.js');
+
+if (isMainThread) {
+    const manager = new ClusterManager({
+        totalShards:   4,
+        shardsPerCluster: 2,
+        clientOptions: { intents: 53608447 },
     });
 
-    await client.registerSlashCommands();
-    await client.connect();
-}
+    // Expõe globalmente para o IPC funcionar via require
+    global.__clusterManager = manager;
 
-start()
+    manager.launch().catch(console.error);
+}

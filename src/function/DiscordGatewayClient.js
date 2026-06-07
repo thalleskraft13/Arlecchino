@@ -1,8 +1,9 @@
 'use strict';
 
+const LISTASHARDS = [0, 3, 12, 17, 22, 27, 32, 37, 42, 47, 52, 57, 62, 67, 72, 77, 82, 87, 92, 97]
+const { parentPort } = require('worker_threads');
 const fs   = require('fs');
 const path = require('path');
-
 const { WebSocketManager, WebSocketShardEvents } = require('@discordjs/ws');
 const { REST }    = require('@discordjs/rest');
 const { Routes }  = require('discord-api-types/v10');
@@ -21,6 +22,12 @@ const MessageEmbed         = require('./Messages/EmbedBuild.js');
 const GenshinLeaksManager  = require('./System/GenshinLeaksManager.js');
 const LogicEngine = require('./System/EventCreater/LogicEngine.js')
 const FlowUI = require('./System/EventCreater/FlowUI.js');
+const BirthdayManager = require("./System/BirthdayManager.js");
+const LibraryManager = require("./System/EventCreater/LibraryManager.js");
+const MissionManager = require('./System/MissionManager.js');
+const EventEmitter = require('events');
+
+
 
 
 
@@ -40,16 +47,18 @@ const RECONNECT_MAX_DELAY_MS  = 30_000;
 const RECONNECT_MAX_ATTEMPTS  = 10;
 
 
-class DiscordGatewayClient {
+class DiscordGatewayClient extends EventEmitter {
 
 
 
     constructor(options = {}) {
+      super()
         this._validateEnv();
 
         this.token    = process.env.DISCORD_TOKEN;
         this.clientId = process.env.CLIENT_ID;
         this.options  = options;
+        this.CLUSTERS_NAME = ["Knave", "Sweet Night"];
 
         this.commands = new Map();
 
@@ -61,6 +70,8 @@ class DiscordGatewayClient {
             intents:  options.intents ?? 0,
             rest:     this.rest,
             presence: this._buildDefaultPresence(),
+            shardIds:    options.shards      ?? undefined,
+            shardCount:  options.totalShards ?? undefined,
         });
 
 
@@ -72,6 +83,9 @@ class DiscordGatewayClient {
         this.GenshinLeaksManager = new GenshinLeaksManager(this);
         this.logicEngine = new LogicEngine(this);
         this.logicUI = new FlowUI(this);
+        this.libraryManager = new LibraryManager(this);
+        this.birthdayManager = new BirthdayManager(this);
+        this.missionManager = new MissionManager(this);
 
         
         this.guilds = new GuildManager(this);
@@ -82,13 +96,15 @@ class DiscordGatewayClient {
         this._mongoConnected  = false;
         this._mongoConnecting = false;
         
-        this._loadCommands();
+     //   this._loadCommands();
         this._registerGatewayEvents();
         this._registerAntiCrash();
+        
     }
 
 
     async connect() {
+      console.log("\n\n|————————————————————————|\n")
         try {
             console.log('[Gateway] Connecting…');
             await this.manager.connect();
@@ -105,7 +121,7 @@ class DiscordGatewayClient {
      * Registers new, updates changed, deletes removed commands.
      */
     async registerSlashCommands() {
-        console.log('[Deploy] Starting slash command sync…');
+      //  console.log('[Deploy] Starting slash command sync…');
 
         const localCommands = [...this.commands.values()].map(c => c.data);
         const apiCommands   = await this.rest.get(Routes.applicationCommands(this.clientId));
@@ -119,7 +135,7 @@ class DiscordGatewayClient {
         for (const apiCmd of apiCommands) {
             if (!localMap.has(apiCmd.name)) {
                 await this.rest.delete(Routes.applicationCommand(this.clientId, apiCmd.id));
-                console.log(`[Deploy] Deleted: /${apiCmd.name}`);
+            //    console.log(`[Deploy] Deleted: /${apiCmd.name}`);
                 stats.deleted++;
             }
         }
@@ -130,7 +146,7 @@ class DiscordGatewayClient {
 
             if (!existing) {
                 await this.rest.post(Routes.applicationCommands(this.clientId), { body: localCmd });
-                console.log(`[Deploy] Created: /${localCmd.name}`);
+           //     console.log(`[Deploy] Created: /${localCmd.name}`);
                 stats.created++;
                 continue;
             }
@@ -140,42 +156,51 @@ class DiscordGatewayClient {
                     Routes.applicationCommand(this.clientId, existing.id),
                     { body: localCmd }
                 );
-                console.log(`[Deploy] Updated: /${localCmd.name}`);
+           //     console.log(`[Deploy] Updated: /${localCmd.name}`);
                 stats.updated++;
             } else {
                 stats.skipped++;
             }
         }
 
-        console.log(
-            `[Deploy] Done — created: ${stats.created}, updated: ${stats.updated}, ` +
-            `deleted: ${stats.deleted}, skipped: ${stats.skipped}.`
-        );
+    //    console.log(
+    //        `[Deploy] Done — created: ${stats.created}, updated: ${stats.updated}, ` +
+   //         `deleted: ${stats.deleted}, skipped: ${stats.skipped}.`
+   //     );
 
         return stats;
     }
 
     /** Update the bot's presence/activity on all shards. */
-    setPresence(opts = {}) {
-        const payload = {
-            op: 3,
-            d: {
-                since:      opts.since   ?? null,
-                activities: [{
-                    name:    opts.name    ?? 'Assinatura 🌙 Lua Carmesin por apenas R$8,99/mês',
-                    type:    opts.type    ?? 0,
-                    url:     opts.url,
-                    state:   opts.state,
-                    details: opts.details,
-                }],
-                status:     opts.status  ?? 'online',
-                afk:        opts.afk     ?? false,
-            },
-        };
+    setPresence(shardId, opts = {}) {
+    const payload = {
+        op: 3,
+        d: {
+            since:      opts.since  ?? null,
+            activities: [{
+                name:    opts.name  ?? `🌙 Lua Carmesin | Cluster ${process.env.CLUSTER_ID ?? 0}`,
+                type:    opts.type  ?? 0,
+                url:     opts.url,
+                state:   opts.state,
+                details: opts.details,
+            }],
+            status: opts.status ?? 'online',
+            afk:    opts.afk    ?? false,
+        },
+    };
 
-        this.manager.send(0, payload);
+    // Envia para todos os shards deste cluster
+    
+   if (shardId === "all"){
+   const shards = process.env.SHARD_LIST?.split(',').map(Number) ?? [0];
+
+    for (const shardId of shards) {
+        this.manager.send(shardId, payload);
     }
-
+   } else {
+    this.manager.send(shardId, payload);
+   }
+  }
 
     _validateEnv() {
         for (const key of ['DISCORD_TOKEN', 'CLIENT_ID', 'MONGO_URI']) {
@@ -298,22 +323,98 @@ class DiscordGatewayClient {
             this.guilds.handleDispatch(payload);
             await this.logicEngine.handleGateway(payload);
 
-            if (payload.t === 'READY')             return await this._onReady();
+            if (payload.t === 'READY')             return await this._onReady(payload.d);
             if (payload.t === 'INTERACTION_CREATE') return await this._onInteraction(payload.d);
+            
+            if (payload.t === 'VOICE_STATE_UPDATE')   return await this._onVoiceStateUpdate(payload.d);   
+        if (payload.t === 'MESSAGE_REACTION_ADD') return await this._onReactionAdd(payload.d);        
+
         } catch (err) {
             console.error('[Dispatch] Unhandled error:', err);
         }
     }
+    
+    
+    _onVoiceStateUpdate(d) {
+    if (!d.user_id || d.user_id === this.clientId) return;
 
+    if (!this._voiceSessions) this._voiceSessions = new Map();
 
+    const key     = d.user_id;
+    const guildId = d.guild_id;
 
-    async _onReady() {
-        console.log('[Ready] Gateway ready. Bot is online.');
-        this.setPresence();
-        await this._connectMongo();
-        await this.logicEngine.start();
-        await this._startTaskManager();
+    const wasInVoice = this._voiceSessions.has(key);
+    const isInVoice  = !!d.channel_id;
+
+    // Entrou em call
+    if (!wasInVoice && isInVoice) {
+        this._voiceSessions.set(key, { guildId, joinedAt: Date.now() });
+
+        // Missão: entrar em call (goal = 1)
+        this.missionManager.trackEvent(d.user_id, 'join_voice', 1, guildId).catch(() => {});
+        return;
     }
+
+    // Saiu ou trocou de canal — calcula minutos
+    if (wasInVoice && !isInVoice) {
+        const session = this._voiceSessions.get(key);
+        this._voiceSessions.delete(key);
+
+        const minutes = Math.floor((Date.now() - session.joinedAt) / 60_000);
+        if (minutes > 0) {
+            this.missionManager.trackEvent(d.user_id, 'voice_minutes', minutes, session.guildId).catch(() => {});
+        }
+    }
+
+    // Trocou de canal (saiu de um e entrou em outro) — reinicia sessão
+    if (wasInVoice && isInVoice) {
+        const session = this._voiceSessions.get(key);
+        const minutes = Math.floor((Date.now() - session.joinedAt) / 60_000);
+        if (minutes > 0) {
+            this.missionManager.trackEvent(d.user_id, 'voice_minutes', minutes, session.guildId).catch(() => {});
+        }
+        // Reinicia com o novo canal
+        this._voiceSessions.set(key, { guildId, joinedAt: Date.now() });
+    }
+}
+
+// ── Reação ───────────────────────────────────────────────
+async _onReactionAdd(d) {
+    const userId  = d.user_id;
+    const guildId = d.guild_id;
+
+    // Ignora bots
+    if (!userId || !guildId) return;
+
+    await this.missionManager.trackEvent(userId, 'add_reaction', 1, guildId).catch(() => {});
+}
+
+
+
+    async _onReady(d) {
+    console.log(`\n----------> SHARD: ${d.shard[0]}`)
+    await this._loadCommands();
+  //  await this._connectMongo(); // todos conectam
+    const shards = process.env.SHARD_LIST?.split(',').map(Number) ?? [0];
+    
+
+    if (LISTASHARDS.includes(d.shard[0])) {
+        await this._connectMongo()
+        await this._startTaskManager();
+        await this.logicEngine.start();
+        await this.libraryManager.start()
+        await this.registerSlashCommands();
+        console.log("\n|————————————————————————|")
+        await this.emit('ready')
+    }
+   
+
+    this.setPresence(d.shard[0],{
+      name: `🌙 Assinatura Lua Carmesin por R$8,99 | Cluster ${this.CLUSTERS_NAME[process.env.CLUSTER_ID ?? 0]}, Shard: ${d.shard[0]}/4`
+    });
+    
+
+}
 
     async _connectMongo() {
         if (this._mongoConnected || this._mongoConnecting) return;
@@ -545,6 +646,69 @@ Eu estarei observando.`
 
         return normalize(local) !== normalize(api);
     }
+    
+    // Retorna o shard responsável por uma guild
+getShardId(guildId) {
+    const totalShards = parseInt(process.env.TOTAL_SHARDS ?? '1');
+    return Number(BigInt(guildId) >> 22n) % totalShards;
+}
+
+// Retorna os shards ativos neste cluster
+getShards() {
+    return process.env.SHARD_LIST?.split(',').map(Number) ?? [0];
+}
+
+// Retorna o cluster ID
+getClusterId() {
+    return parseInt(process.env.CLUSTER_ID ?? '0');
+}
+
+// Calcula o ping de um shard específico
+async getShardPing(shardId) {
+    try {
+        const start = Date.now();
+        await DiscordRequest(`/gateway`, { method: 'GET' });
+        return Date.now() - start;
+    } catch {
+        return -1;
+    }
+}
+
+// Retorna info completa de todos os shards do cluster
+async getClusterInfo() {
+    const shards  = this.getShards();
+    const cluster = this.getClusterId();
+
+    const shardInfos = await Promise.all(
+        shards.map(async (shardId) => ({
+            shardId,
+            ping: await this.getShardPing(shardId),
+        }))
+    );
+
+    return {
+        clusterId: cluster,
+        shards:    shardInfos,
+        totalShards: parseInt(process.env.TOTAL_SHARDS ?? '1'),
+        uptime:    process.uptime(),
+        memory:    process.memoryUsage().heapUsed,
+    };
+}
+
+requestAllStats() {
+    return new Promise((resolve, reject) => {
+        const requestId = `allstats_${Date.now()}`;
+        const timeout = setTimeout(() => reject(new Error('Timeout')), 10_000);
+
+        this.once('all_stats_response', (msg) => {
+            if (msg.requestId !== requestId) return;
+            clearTimeout(timeout);
+            resolve(msg.data);
+        });
+
+        parentPort.postMessage({ type: 'GET_ALL_STATS', requestId });
+    });
+}
 }
 
 module.exports = DiscordGatewayClient;

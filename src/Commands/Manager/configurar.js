@@ -93,6 +93,13 @@ module.exports = {
             }
           },
 
+/*{
+  label:       "Sistema de Aniversários",
+  description: "Mensagens automáticas, cargo e botão de registro",
+  value:       "birthday",
+  emoji: { name: "🎂" }
+},*/
+
           {
             label: "Logic Builder",
             description: "Criação de fluxos e automações",
@@ -121,6 +128,10 @@ module.exports = {
           case "leaks":
             await client.GenshinLeaksManager.deferUpdate(i);
             return client.GenshinLeaksManager.startSetup(i);
+            
+            case "birthday":
+  await client.birthdayManager.deferUpdate(i);
+  return client.birthdayManager.startSetup(i);
 
           case "logic":
 

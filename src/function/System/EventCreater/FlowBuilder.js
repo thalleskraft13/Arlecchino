@@ -87,6 +87,8 @@ const CONDITION_CATALOG = [
   { category: 'variable', type: 'neq', label: '🔢 Variável diferente de',      params: ['name', 'value'] },
   { category: 'variable', type: 'gt',  label: '🔢 Variável maior que',         params: ['name', 'value'] },
   { category: 'variable', type: 'lt',  label: '🔢 Variável menor que',         params: ['name', 'value'] },
+  { category: 'variable', type: 'list_contains',     label: '📋 Lista contém valor',     params: ['name', 'value'] },
+{ category: 'variable', type: 'not_list_contains',  label: '📋 Lista não contém valor', params: ['name', 'value'] },
   // Probabilidade
   { category: 'probability', type: 'chance', label: '🎲 Chance %', params: ['percent'] },
   // Data / Hora

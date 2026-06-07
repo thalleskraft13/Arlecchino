@@ -21,6 +21,13 @@ class FlowUI {
     this.client       = client;
     this.flowBuilder  = new FlowBuilder(client, this);
     this.cmdBuilder   = new CommandBuilder(client, this);
+
+    /**
+     * Cache de listas para evitar novas queries a cada troca de página.
+     * Estrutura: { [guildId]: { flows: [...], commands: [...], fetchedAt: Date } }
+     * TTL de 60 segundos — após isso uma nova query é feita.
+     */
+    this._listCache = {};
   }
 
   /* ═══════════════════════════════════════════
@@ -88,6 +95,86 @@ class FlowUI {
   }
 
   /* ═══════════════════════════════════════════
+     HELPERS DE PAGINAÇÃO
+     ═══════════════════════════════════════════ */
+
+  /**
+   * Garante que o número de página fique dentro dos limites válidos.
+   * @param {number} page  - Página solicitada (0-based)
+   * @param {number} total - Total de itens
+   * @returns {{ page: number, maxPage: number }}
+   */
+  _clampPage(page, total) {
+    const maxPage = Math.max(0, Math.ceil(total / 25) - 1);
+    const safePage = Math.min(Math.max(0, page), maxPage);
+    return { page: safePage, maxPage };
+  }
+
+  /**
+   * Retorna o slice de itens da página atual.
+   * @param {Array}  list - Lista completa
+   * @param {number} page - Página atual (0-based)
+   * @returns {Array}
+   */
+  _pageSlice(list, page) {
+    return list.slice(page * 25, page * 25 + 25);
+  }
+
+  /**
+   * Monta a linha de botões de navegação de página.
+   * Desabilita ⬅️ na primeira página e ➡️ na última.
+   * @param {string}   user
+   * @param {number}   page
+   * @param {number}   maxPage
+   * @param {Function} onPrev  - Callback (interaction, prevPage)
+   * @param {Function} onNext  - Callback (interaction, nextPage)
+   * @returns {Object} row do Discord
+   */
+  _paginationRow(user, page, maxPage, onPrev, onNext) {
+    const btnPrev = this.btn(user, '⬅️ Anterior', page === 0 ? 2 : 1, async (i) => {
+      await this.deferUpdate(i);
+      return onPrev(i, page - 1);
+    });
+
+    const btnNext = this.btn(user, '➡️ Próximo', page >= maxPage ? 2 : 1, async (i) => {
+      await this.deferUpdate(i);
+      return onNext(i, page + 1);
+    });
+
+    // Botões com style=2 (cinza) quando desabilitados ainda disparam interação;
+    // o clamp em _clampPage garante que a página não ultrapasse os limites.
+    return this.row(btnPrev, btnNext);
+  }
+
+  /* ═══════════════════════════════════════════
+     CACHE DE LISTAS
+     ═══════════════════════════════════════════ */
+
+  /** TTL do cache em milissegundos */
+  static CACHE_TTL = 60_000;
+
+  _isCacheValid(guildId, key) {
+    const entry = this._listCache[guildId];
+    if (!entry || !entry[key]) return false;
+    return (Date.now() - entry.fetchedAt) < FlowUI.CACHE_TTL;
+  }
+
+  _setCache(guildId, key, data) {
+    if (!this._listCache[guildId]) this._listCache[guildId] = {};
+    this._listCache[guildId][key] = data;
+    this._listCache[guildId].fetchedAt = Date.now();
+  }
+
+  _getCache(guildId, key) {
+    return this._listCache[guildId]?.[key] ?? null;
+  }
+
+  /** Invalida o cache de um guild (chamado após criar/excluir fluxos ou comandos). */
+  invalidateCache(guildId) {
+    delete this._listCache[guildId];
+  }
+
+  /* ═══════════════════════════════════════════
      TELA: HOME
      ═══════════════════════════════════════════ */
 
@@ -97,6 +184,9 @@ class FlowUI {
 
     const engine = this.client.logicEngine;
     const flows  = await engine.getFlows(guildId);
+
+    // Atualiza cache de fluxos ao abrir a home
+    this._setCache(guildId, 'flows', flows);
 
     const { FlowModel, CustomCommandModel } = require('../../../Mongodb/flow.js');
     const cmdCount = await CustomCommandModel.countDocuments({ guildId });
@@ -110,12 +200,12 @@ class FlowUI {
 
     const btnFlows = this.btn(user, `Fluxos (${flows.length})`, 1, async (i) => {
       await this.deferUpdate(i);
-      return this.flowList(i, user);
+      return this.flowList(i, user, 0);
     });
 
     const btnCmds = this.btn(user, `Comandos (${cmdCount})`, 2, async (i) => {
       await this.deferUpdate(i);
-      return this.commandList(i, user);
+      return this.commandList(i, user, 0);
     });
 
     const btnNew = this.btn(user, '➕ Novo Fluxo', 3, async (i) => {
@@ -141,24 +231,36 @@ class FlowUI {
   }
 
   /* ═══════════════════════════════════════════
-     TELA: LISTA DE FLUXOS
+     TELA: LISTA DE FLUXOS (com paginação)
      ═══════════════════════════════════════════ */
 
-  async flowList(interaction, user) {
+  /**
+   * @param {Object} interaction
+   * @param {string} user
+   * @param {number} [page=0]  - Página atual (0-based)
+   */
+  async flowList(interaction, user, page = 0) {
     const guildId = interaction.guild_id;
-    const flows   = await this.client.logicEngine.getFlows(guildId);
+
+    // Usa cache se ainda válido; caso contrário faz nova query
+    let flows;
+    if (this._isCacheValid(guildId, 'flows')) {
+      flows = this._getCache(guildId, 'flows');
+    } else {
+      flows = await this.client.logicEngine.getFlows(guildId);
+      this._setCache(guildId, 'flows', flows);
+    }
+
+    const btnCreate = this.btn(user, '➕ Novo Fluxo', 3, async (i) => {
+      return this.flowBuilder.startCreate(i, user);
+    });
+
+    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
+      await this.deferUpdate(i);
+      return this.open(i);
+    });
 
     if (!flows.length) {
-      const btnCreate = this.btn(user, '➕ Criar primeiro fluxo', 3, async (i) => {
-      //  await this.deferUpdate(i);
-        return this.flowBuilder.startCreate(i, user);
-      });
-
-      const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
-        await this.deferUpdate(i);
-        return this.open(i);
-      });
-
       return this.editOriginal(interaction, {
         embeds: [{
           title:       '📋 Fluxos',
@@ -169,8 +271,10 @@ class FlowUI {
       });
     }
 
-    // Pagina em grupos de 25 (limite do select)
-    const options = flows.slice(0, 25).map(f => ({
+    const { page: safePage, maxPage } = this._clampPage(page, flows.length);
+    const pageItems = this._pageSlice(flows, safePage);
+
+    const options = pageItems.map(f => ({
       label:       f.name.slice(0, 100),
       value:       f.flowId,
       description: `${this._triggerLabel(f.trigger)} • ${f.enabled ? '🟢 Ativo' : '🔴 Desativado'}`,
@@ -182,26 +286,29 @@ class FlowUI {
       return this.flowMenu(i, user, i.data.values[0]);
     });
 
-    const btnCreate = this.btn(user, '➕ Novo Fluxo', 3, async (i) => {
-      await this.deferUpdate(i);
-      return this.flowBuilder.startCreate(i, user);
-    });
+    const components = [this.row(sel)];
 
-    const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
-      await this.deferUpdate(i);
-      return this.open(i);
-    });
+    // Só exibe linha de paginação se houver mais de uma página
+    if (maxPage > 0) {
+      components.push(
+        this._paginationRow(
+          user, safePage, maxPage,
+          (i, p) => this.flowList(i, user, p),
+          (i, p) => this.flowList(i, user, p)
+        )
+      );
+    }
+
+    components.push(this.row(btnCreate, btnBack));
 
     return this.editOriginal(interaction, {
       embeds: [{
         title:       `📋 Fluxos (${flows.length})`,
         description: 'Selecione um fluxo para gerenciar.',
-        color:       0x5865F2
+        color:       0x5865F2,
+        footer:      { text: `Página ${safePage + 1}/${maxPage + 1}` }
       }],
-      components: [
-        this.row(sel),
-        this.row(btnCreate, btnBack)
-      ]
+      components
     });
   }
 
@@ -248,6 +355,8 @@ class FlowUI {
     const btnToggle = this.btn(user, flow.enabled ? '⏸️ Desativar' : '▶️ Ativar', flow.enabled ? 4 : 3, async (i) => {
       await this.deferUpdate(i);
       await this.client.logicEngine.toggleFlow(flowId, guildId);
+      // Invalida cache para refletir mudança de status
+      this.invalidateCache(guildId);
       return this.flowMenu(i, user, flowId);
     });
 
@@ -258,7 +367,7 @@ class FlowUI {
 
     const btnBack = this.btn(user, '⬅️ Voltar', 2, async (i) => {
       await this.deferUpdate(i);
-      return this.flowList(i, user);
+      return this.flowList(i, user, 0);
     });
 
     return this.editOriginal(interaction, {
@@ -302,8 +411,10 @@ class FlowUI {
     const btnConfirm = this.btn(user, '✅ Confirmar exclusão', 4, async (i) => {
       await this.deferUpdate(i);
       await this.client.logicEngine.deleteFlow(flowId, i.guild_id);
+      // Invalida cache após exclusão
+      this.invalidateCache(i.guild_id);
       await this.followUpEphemeral(i, { content: `✅ Fluxo **${flowName}** excluído.` });
-      return this.flowList(i, user);
+      return this.flowList(i, user, 0);
     });
 
     const btnCancel = this.btn(user, '❌ Cancelar', 2, async (i) => {
@@ -322,16 +433,29 @@ class FlowUI {
   }
 
   /* ═══════════════════════════════════════════
-     TELA: LISTA DE COMANDOS
+     TELA: LISTA DE COMANDOS (com paginação)
      ═══════════════════════════════════════════ */
 
-  async commandList(interaction, user) {
+  /**
+   * @param {Object} interaction
+   * @param {string} user
+   * @param {number} [page=0]  - Página atual (0-based)
+   */
+  async commandList(interaction, user, page = 0) {
     const guildId = interaction.guild_id;
     const { CustomCommandModel } = require('../../../Mongodb/flow.js');
-    const commands = await CustomCommandModel.find({ guildId }).lean();
+
+    // Usa cache se ainda válido; caso contrário faz nova query
+    let commands;
+    if (this._isCacheValid(guildId, 'commands')) {
+      commands = this._getCache(guildId, 'commands');
+    } else {
+      commands = await CustomCommandModel.find({ guildId }).lean();
+      this._setCache(guildId, 'commands', commands);
+    }
 
     const btnCreate = this.btn(user, '➕ Novo Comando', 3, async (i) => {
-     await this.deferUpdate(i);
+      await this.deferUpdate(i);
       return this.cmdBuilder.startCreate(i, user);
     });
 
@@ -351,7 +475,10 @@ class FlowUI {
       });
     }
 
-    const options = commands.slice(0, 25).map(c => ({
+    const { page: safePage, maxPage } = this._clampPage(page, commands.length);
+    const pageItems = this._pageSlice(commands, safePage);
+
+    const options = pageItems.map(c => ({
       label:       `${c.prefix}${c.name}`.slice(0, 100),
       value:       c.commandId,
       description: c.description?.slice(0, 100) || 'Sem descrição',
@@ -363,16 +490,29 @@ class FlowUI {
       return this.cmdBuilder.commandMenu(i, user, i.data.values[0]);
     });
 
+    const components = [this.row(sel)];
+
+    // Só exibe linha de paginação se houver mais de uma página
+    if (maxPage > 0) {
+      components.push(
+        this._paginationRow(
+          user, safePage, maxPage,
+          (i, p) => this.commandList(i, user, p),
+          (i, p) => this.commandList(i, user, p)
+        )
+      );
+    }
+
+    components.push(this.row(btnCreate, btnBack));
+
     return this.editOriginal(interaction, {
       embeds: [{
         title:       `🔧 Comandos (${commands.length})`,
         description: 'Selecione um comando para gerenciar.',
-        color:       0x5865F2
+        color:       0x5865F2,
+        footer:      { text: `Página ${safePage + 1}/${maxPage + 1}` }
       }],
-      components: [
-        this.row(sel),
-        this.row(btnCreate, btnBack)
-      ]
+      components
     });
   }
 

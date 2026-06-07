@@ -115,6 +115,8 @@ module.exports = {
           quantidade,
           data: agora
         });
+        
+        await client.missionManager.trackEvent(authorId, 'explore', 1, interaction.guild_id);
 
         user.exploracao.mondstadt.coletar = 0;
         user.exploracao.mondstadt.tempo = 0;

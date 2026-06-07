@@ -220,7 +220,12 @@ const userSchema = new Schema({
         default: 0
       }
     }
-  }
+  },
+  
+  missions: {
+  daily:  { type: Object, default: () => ({}) },
+  weekly: { type: Object, default: () => ({}) }
+}
 
 });
 

@@ -47,6 +47,8 @@ async function DiscordRequest(route, options = {}) {
     const config = _buildRequestConfig(method, options);
 
     let response;
+    
+    
 
     try {
         response = await _fetchWithTimeout(url, config);

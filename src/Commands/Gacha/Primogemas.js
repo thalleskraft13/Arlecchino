@@ -202,6 +202,8 @@ module.exports = {
             },
             { new: true }
           );
+          
+          await client.missionManager.trackEvent(authorId, 'do_daily', 1, interaction.guild_id);
 
           const embedSuccess = new MessageEmbed()
             .setTitle("🎁 Daily Resgatado!")

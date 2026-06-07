@@ -209,6 +209,10 @@ if (parsed?.t === 'cv2_select') {
   return;
 }
 
+if (interaction.data?.custom_id === "birthday_register_btn") {
+  return this.client.birthdayManager.handleButtonRegister(interaction);
+}
+
 
             const entry = this._cache.get(customId);
 

@@ -67,7 +67,7 @@ class ConditionEvaluator {
   }
 
   async _dispatch(cond, ctx) {
-    const p = ctx.interpolateParams(cond.params || {});
+    const p = await ctx.interpolateParams(cond.params || {});
 
     switch (cond.category) {
       case 'user':        return this._user(cond.type, p, ctx);
@@ -238,6 +238,8 @@ class ConditionEvaluator {
       case 'lt':  return Number(val) < Number(cmp);
       case 'gte': return Number(val) >= Number(cmp);
       case 'lte': return Number(val) <= Number(cmp);
+      case 'list_contains':     return Array.isArray(val) && val.includes(cmp);
+case 'not_list_contains': return !Array.isArray(val) || !val.includes(cmp);
       default: return true;
     }
   }

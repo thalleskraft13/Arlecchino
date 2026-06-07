@@ -2,6 +2,107 @@
 
 const { Schema, model } = require('mongoose');
 
+
+const libraryFlowSchema = new Schema({
+  libId:        { type: String, required: true, unique: true },
+  authorId:     { type: String, required: true },   // userId Discord
+  authorName:   { type: String, default: '' },
+
+  name:         { type: String, required: true },
+  shortDesc:    { type: String, default: '', maxlength: 150 },
+  fullDesc:     { type: String, default: '', maxlength: 2000 },
+
+  category: {
+    type: String,
+    enum: [
+      'Moderação','Economia','Automação','Logs','Tickets',
+      'Recompensas','Eventos','RPG','Utilidade','Comunidade',
+      'Diversão','Outros'
+    ],
+    default: 'Outros'
+  },
+
+  tags:    { type: [String], default: [] },
+  version: { type: String, default: '1.0.0' },
+
+  // Snapshot dos fluxos (sem guildId — neutros para instalação)
+  flows: { type: [Schema.Types.Mixed], default: [] },
+
+  // Variáveis de template detectadas automaticamente
+  // Ex: ['canal_logs', 'cargo_xp', 'canal_boas_vindas']
+  templateVars: { type: [String], default: [] },
+
+  status: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected'],
+    default: 'approved'   // aprovação automática por padrão; mude para 'pending' se quiser moderação
+  },
+
+  stats: {
+    installs:     { type: Number, default: 0 },
+    likes:        { type: Number, default: 0 },
+    dislikes:     { type: Number, default: 0 },
+    avgRating:    { type: Number, default: 0 },
+    ratingCount:  { type: Number, default: 0 },
+    weeklyScore:  { type: Number, default: 0 }  // decai semanalmente
+  },
+
+  publishedAt: { type: Date, default: Date.now },
+  updatedAt:   { type: Date, default: Date.now },
+
+  // Changelog da última versão
+  lastChangelog: { type: String, default: '' },
+
+  // Histórico de versões anteriores (últimas 10)
+  versionHistory: {
+    type: [{
+      version:    { type: String },
+      changelog:  { type: String, default: '' },
+      archivedAt: { type: Date }
+    }],
+    default: []
+  }
+});
+
+libraryFlowSchema.index({ 'stats.installs': -1 });
+libraryFlowSchema.index({ 'stats.avgRating': -1 });
+libraryFlowSchema.index({ 'stats.weeklyScore': -1 });
+libraryFlowSchema.index({ category: 1, status: 1 });
+libraryFlowSchema.index({ tags: 1, status: 1 });
+
+// ── Avaliações individuais ──────────────────────────────────
+const libraryRatingSchema = new Schema({
+  libId:   { type: String, required: true },
+  userId:  { type: String, required: true },
+  rating:  { type: Number, min: 1, max: 5, default: null },
+  vote:    { type: String, enum: ['like', 'dislike'], default: null }
+});
+libraryRatingSchema.index({ libId: 1, userId: 1 }, { unique: true });
+
+// ── Perfil de criador ───────────────────────────────────────
+const creatorProfileSchema = new Schema({
+  userId:      { type: String, required: true, unique: true },
+  username:    { type: String, default: '' },
+  bio:         { type: String, default: '', maxlength: 300 },
+  followers:   { type: [String], default: [] },   // userIds que seguem
+  following:   { type: [String], default: [] },   // userIds que este segue
+  publishedAt: { type: Date, default: Date.now }
+});
+
+// ── Instalações (histórico por guild) ──────────────────────
+const libraryInstallSchema = new Schema({
+  libId:       { type: String, required: true },
+  guildId:     { type: String, required: true },
+  installedBy: { type: String, required: true },   // userId
+  flowIds:     { type: [String], default: [] },    // IDs criados no guild
+  version:     { type: String, default: '1.0.0' },
+  installedAt: { type: Date, default: Date.now }
+});
+libraryInstallSchema.index({ libId: 1, guildId: 1 });
+
+
+
+
 /* ═══════════════════════════════════════════════════════════
    CONDITION SCHEMA
    ═══════════════════════════════════════════════════════════ */
@@ -232,10 +333,16 @@ const UserVarModel = model('UserVar', userVarSchema);
    EXPORTS
    ═══════════════════════════════════════════════════════════ */
 
+
+
 module.exports = {
   FlowModel:          model('Flow',          flowSchema),
   CustomCommandModel: model('CustomCommand', customCommandSchema),
   PersistentVarModel: model('PersistentVar', persistentVarSchema),
   FlowRunLogModel:    model('FlowRunLog',    flowRunLogSchema),
-  UserVarModel: model("userVarSchema", userVarSchema)
+  UserVarModel: model("userVarSchema", userVarSchema),
+  LibraryFlowModel:    model('LibraryFlow',    libraryFlowSchema),
+  LibraryRatingModel:  model('LibraryRating',  libraryRatingSchema),
+  CreatorProfileModel: model('CreatorProfile', creatorProfileSchema),
+  LibraryInstallModel: model('LibraryInstall', libraryInstallSchema),
 };
